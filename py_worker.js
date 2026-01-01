@@ -136,24 +136,10 @@ self.onmessage = async (ev) => {
       execLimit: 2_500_000,
     });
 
-    // Patch importModule to provide 'arm' and 'sim'
-    Sk.importModule = (function (orig) {
-      return function (name) {
-        if (name === "arm") {
-          const m = new Sk.builtin.module();
-          const api = armModule();
-          for (const k in api) m.$d[k] = api[k];
-          return m;
-        }
-        if (name === "sim") {
-          const m = new Sk.builtin.module();
-          const api = simModule();
-          for (const k in api) m.$d[k] = api[k];
-          return m;
-        }
-        return orig(name);
-      };
-    })(Sk.importModule);
+    // Provide built-in modules 'arm' and 'sim'
+    Sk.builtinModules = Sk.builtinModules || {};
+    Sk.builtinModules.arm = { __name__: "arm", ...armModule() };
+    Sk.builtinModules.sim = { __name__: "sim", ...simModule() };
 
     try {
       const p = Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true));
