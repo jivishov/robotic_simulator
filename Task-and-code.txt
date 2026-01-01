@@ -1,0 +1,663 @@
+Review the following task, objectives, purpose and related  code. Refine to perfect it. Commit after my confirmation.
+# =============================================================================
+# PROJECT OBJECTIVES / DESCRIPTION / PURPOSE
+# =============================================================================
+# Objectives (coding-first, middle/high school, web-based)
+# 1) Let students write Python code to control a simulated robotic arm using a
+#    simple, readable API (arm.move_to, arm.line_to, arm.home, etc.).
+# 2) Provide immediate visual feedback (2D canvas) with deterministic, repeatable
+#    kinematics-only motion (no physics), suitable for classroom use and grading.
+# 3) Run Python safely in-browser via a sandboxed runtime (Worker) with limits
+#    and a Stop button (basic protection against infinite loops / freezes).
+# 4) Keep the simulator “engineering-grade as possible” within kinematics-only:
+#    - joint limits enforced
+#    - unreachable targets detected (IK feasibility)
+#    - speed scaling and smooth interpolation
+#    - telemetry readouts (joint angles, queue, busy state)
+# 5) Provide an extensible architecture (command protocol from Python -> sim core)
+#    so future upgrades can add: missions, autograding, obstacle checks, 3D view,
+#    additional robot models, numerical IK, Jacobians, etc.
+#
+# Description
+# This is a static web app (GitHub Pages compatible) that executes student Python
+# code in the browser and simulates a 2-link planar robot arm in 2D. Student code
+# calls a constrained API. Each API call sends a command to the simulator (main
+# thread). The simulator runs a deterministic motion loop and acknowledges
+# completion back to Python so code can be sequential and intuitive.
+#
+# Purpose
+# - Teach programming fundamentals (sequencing, loops, functions, debugging) in a
+#   robotics context without hardware cost or safety issues.
+# - Prepare students for real robotics thinking: constraints, joint limits,
+#   reachable workspace, and stepwise motion execution.
+# - Serve as a base product that can be enhanced into a richer robotics lab.
+#
+# Deliverable
+# A four-file static website:
+#   index.html, styles.css, main.js, py_worker.js
+# =============================================================================
+
+
+# =============================================================================
+# FILE: index.html
+# =============================================================================
+@doctype html
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Python Robot Arm Simulator (2D Kinematics)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title">Python Robot Arm Simulator</div>
+      <div class="btns">
+        <button id="runBtn">Run</button>
+        <button id="stopBtn">Stop</button>
+        <button id="resetBtn">Reset</button>
+        <button id="homeBtn">Home</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="panel">
+        <div class="panelTitle">Python Code</div>
+        <textarea id="code"></textarea>
+        <div class="hint">
+          API: <code>import arm, sim</code> |
+          <code>arm.move_to(x,y)</code> |
+          <code>arm.line_to(x,y,steps=50)</code> |
+          <code>arm.set_joint_angles([deg,deg])</code> |
+          <code>arm.set_speed(0..1)</code> |
+          <code>sim.sleep(sec)</code>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelTitle">Simulator</div>
+        <canvas id="canvas" width="700" height="520"></canvas>
+        <div class="readouts" id="readouts"></div>
+      </section>
+
+      <section class="panel console">
+        <div class="panelTitle">Console</div>
+        <pre id="console"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
+
+
+# =============================================================================
+# FILE: styles.css
+# =============================================================================
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+body { margin: 0; background: #0b0f14; color: #e8eef5; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: #0f1620; border-bottom: 1px solid #1b2633;
+}
+.title { font-weight: 650; }
+.btns button {
+  margin-left: 8px; padding: 8px 12px; border: 1px solid #2a3b52;
+  background: #121c28; color: #e8eef5; border-radius: 8px; cursor: pointer;
+}
+.btns button:hover { background: #162234; }
+.grid {
+  display: grid; gap: 12px; padding: 12px;
+  grid-template-columns: 1.15fr 1fr;
+  grid-template-rows: 1fr 0.55fr;
+  height: calc(100vh - 54px);
+}
+.panel {
+  background: #0f1620; border: 1px solid #1b2633; border-radius: 12px;
+  padding: 10px; display: flex; flex-direction: column; min-height: 0;
+}
+.panelTitle { font-weight: 600; margin-bottom: 8px; opacity: 0.95; }
+#code {
+  flex: 1; min-height: 0; width: 100%;
+  background: #0b1119; color: #e8eef5;
+  border: 1px solid #1b2633; border-radius: 10px;
+  padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.4; outline: none; resize: none;
+}
+.hint { margin-top: 8px; opacity: 0.85; font-size: 12px; }
+canvas {
+  background: #0b1119; border: 1px solid #1b2633; border-radius: 12px;
+  width: 100%; height: auto;
+}
+.readouts { margin-top: 8px; font-size: 12px; opacity: 0.9; }
+.console { grid-column: 1 / span 2; }
+#console {
+  flex: 1; min-height: 0;
+  background: #0b1119; border: 1px solid #1b2633; border-radius: 10px;
+  padding: 10px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.4;
+}
+code { color: #b9e2ff; }
+
+
+# =============================================================================
+# FILE: main.js
+# =============================================================================
+// main.js (ES module)
+
+const $ = (id) => document.getElementById(id);
+
+const canvas = $("canvas");
+const ctx = canvas.getContext("2d");
+const consoleEl = $("console");
+const readoutsEl = $("readouts");
+
+const runBtn = $("runBtn");
+const stopBtn = $("stopBtn");
+const resetBtn = $("resetBtn");
+const homeBtn = $("homeBtn");
+
+const codeEl = $("code");
+codeEl.value = `import arm, sim
+
+arm.home()
+arm.set_speed(0.7)
+
+# Draw a square
+arm.move_to(140, 40)
+arm.line_to(140, 120, steps=40)
+arm.line_to(60, 120, steps=40)
+arm.line_to(60, 40, steps=40)
+arm.line_to(140, 40, steps=40)
+
+sim.sleep(0.5)
+arm.home()
+`;
+
+function log(msg) {
+  consoleEl.textContent += msg + "\n";
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+function clearLog() { consoleEl.textContent = ""; }
+
+// -------------------- Robot model (2R planar) --------------------
+const model = {
+  L1: 160,    // pixels
+  L2: 120,    // pixels
+  // joint limits in radians
+  q1Min: deg2rad(-170), q1Max: deg2rad(170),
+  q2Min: deg2rad(-170), q2Max: deg2rad(170),
+  maxSpeed: deg2rad(120),  // rad/s (scaled by speedScale)
+};
+
+const state = {
+  q: [deg2rad(0), deg2rad(0)],
+  speedScale: 0.7,
+  toolPath: [],
+  busy: false,
+  currentCmd: null, // {id,type,...}
+  t: 0,
+};
+
+function deg2rad(d) { return (d * Math.PI) / 180; }
+function rad2deg(r) { return (r * 180) / Math.PI; }
+function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+function fk(q) {
+  const [q1, q2] = q;
+  const x1 = model.L1 * Math.cos(q1);
+  const y1 = model.L1 * Math.sin(q1);
+  const x2 = x1 + model.L2 * Math.cos(q1 + q2);
+  const y2 = y1 + model.L2 * Math.sin(q1 + q2);
+  return { x1, y1, x2, y2 };
+}
+
+// Closed-form IK for 2R planar, elbow-down by default
+function ik(x, y) {
+  const L1 = model.L1, L2 = model.L2;
+  const r2 = x*x + y*y;
+  const c2 = (r2 - L1*L1 - L2*L2) / (2*L1*L2);
+
+  if (c2 < -1 || c2 > 1) return { ok: false, reason: "unreachable" };
+
+  const s2_pos = Math.sqrt(Math.max(0, 1 - c2*c2));
+  const s2_neg = -s2_pos;
+
+  const q2a = Math.atan2(s2_pos, c2); // elbow-up
+  const q2b = Math.atan2(s2_neg, c2); // elbow-down
+
+  const q1a = Math.atan2(y, x) - Math.atan2(L2*Math.sin(q2a), L1 + L2*Math.cos(q2a));
+  const q1b = Math.atan2(y, x) - Math.atan2(L2*Math.sin(q2b), L1 + L2*Math.cos(q2b));
+
+  const candA = [wrap(q1a), wrap(q2a)];
+  const candB = [wrap(q1b), wrap(q2b)];
+
+  const okA = withinLimits(candA);
+  const okB = withinLimits(candB);
+  if (okB) return { ok: true, q: candB, alt: candA, chosen: "elbow-down" };
+  if (okA) return { ok: true, q: candA, alt: candB, chosen: "elbow-up" };
+  return { ok: false, reason: "joint-limits" };
+}
+
+function wrap(a) {
+  while (a > Math.PI) a -= 2*Math.PI;
+  while (a < -Math.PI) a += 2*Math.PI;
+  return a;
+}
+function withinLimits(q) {
+  return (q[0] >= model.q1Min && q[0] <= model.q1Max && q[1] >= model.q2Min && q[1] <= model.q2Max);
+}
+
+// -------------------- Command execution --------------------
+const cmdQueue = [];
+let nextCmdId = 1;
+
+function enqueue(cmd) {
+  cmdQueue.push(cmd);
+  tryStartNext();
+}
+
+function tryStartNext() {
+  if (state.busy) return;
+  const cmd = cmdQueue.shift();
+  if (!cmd) return;
+  startCommand(cmd);
+}
+
+function startCommand(cmd) {
+  state.busy = true;
+  state.currentCmd = cmd;
+  state.t = 0;
+
+  if (cmd.type === "HOME") {
+    cmd.qStart = [...state.q];
+    cmd.qTarget = [0, 0];
+    cmd.duration = computeDuration(cmd.qStart, cmd.qTarget);
+  } else if (cmd.type === "SET_JOINTS") {
+    cmd.qStart = [...state.q];
+    cmd.qTarget = [
+      clamp(deg2rad(cmd.deg[0]), model.q1Min, model.q1Max),
+      clamp(deg2rad(cmd.deg[1]), model.q2Min, model.q2Max),
+    ];
+    cmd.duration = computeDuration(cmd.qStart, cmd.qTarget);
+  } else if (cmd.type === "MOVE_TO") {
+    const sol = ik(cmd.x, cmd.y);
+    if (!sol.ok) {
+      finishCommand(cmd, { ok: false, error: sol.reason });
+      return;
+    }
+    cmd.qStart = [...state.q];
+    cmd.qTarget = sol.q;
+    cmd.duration = computeDuration(cmd.qStart, cmd.qTarget);
+    cmd.ik = sol;
+  } else if (cmd.type === "SLEEP") {
+    cmd.duration = Math.max(0, cmd.seconds);
+  } else if (cmd.type === "LINE_TO") {
+    // Expand into a series of MOVE_TO commands
+    const ee = fk(state.q);
+    const x0 = ee.x2, y0 = ee.y2;
+    const steps = Math.max(2, cmd.steps | 0);
+    for (let i = 1; i <= steps; i++) {
+      const u = i / steps;
+      enqueue({ id: `${cmd.id}:${i}`, type: "MOVE_TO", x: x0 + (cmd.x - x0)*u, y: y0 + (cmd.y - y0)*u, fromLine: true, parentId: cmd.id });
+    }
+    finishCommand(cmd, { ok: true, note: "expanded" });
+    return;
+  } else {
+    finishCommand(cmd, { ok: false, error: "unknown-cmd" });
+    return;
+  }
+}
+
+function computeDuration(qStart, qTarget) {
+  const dq1 = Math.abs(qTarget[0] - qStart[0]);
+  const dq2 = Math.abs(qTarget[1] - qStart[1]);
+  const dq = Math.max(dq1, dq2);
+  const speed = model.maxSpeed * clamp(state.speedScale, 0.05, 1.0);
+  return Math.max(0.08, dq / speed);
+}
+
+function update(dt) {
+  if (state.busy && state.currentCmd) {
+    const cmd = state.currentCmd;
+    state.t += dt;
+
+    if (cmd.type === "SLEEP") {
+      if (state.t >= cmd.duration) finishCommand(cmd, { ok: true });
+    } else if (cmd.type === "HOME" || cmd.type === "SET_JOINTS" || cmd.type === "MOVE_TO") {
+      const u = clamp(state.t / cmd.duration, 0, 1);
+      const s = smoothstep(u);
+      state.q[0] = lerp(cmd.qStart[0], cmd.qTarget[0], s);
+      state.q[1] = lerp(cmd.qStart[1], cmd.qTarget[1], s);
+
+      const ee = fk(state.q);
+      state.toolPath.push({ x: ee.x2, y: ee.y2 });
+
+      if (u >= 1) finishCommand(cmd, { ok: true, ik: cmd.ik?.chosen });
+    }
+  }
+}
+
+function finishCommand(cmd, result) {
+  state.busy = false;
+  state.currentCmd = null;
+  worker.postMessage({ type: "cmd_done", id: cmd.id, result });
+  tryStartNext();
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function smoothstep(t) { return t*t*(3 - 2*t); }
+
+// -------------------- Rendering --------------------
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // coordinate transform: base at bottom-left-ish, y up
+  const base = { x: 140, y: canvas.height - 100 };
+
+  // grid
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  for (let x = 0; x < canvas.width; x += 40) { line(x, 0, x, canvas.height); }
+  for (let y = 0; y < canvas.height; y += 40) { line(0, y, canvas.width, y); }
+  ctx.restore();
+
+  // axes
+  ctx.save();
+  ctx.globalAlpha = 0.6;
+  line(base.x, base.y, base.x + 250, base.y);
+  line(base.x, base.y, base.x, base.y - 250);
+  ctx.restore();
+
+  // FK points
+  const k = fk(state.q);
+  const p0 = { x: base.x, y: base.y };
+  const p1 = { x: base.x + k.x1, y: base.y - k.y1 };
+  const p2 = { x: base.x + k.x2, y: base.y - k.y2 };
+
+  // toolpath
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  ctx.beginPath();
+  for (let i = 0; i < state.toolPath.length; i++) {
+    const tp = state.toolPath[i];
+    const px = base.x + tp.x;
+    const py = base.y - tp.y;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // links
+  ctx.save();
+  ctx.lineWidth = 8;
+  line(p0.x, p0.y, p1.x, p1.y);
+  line(p1.x, p1.y, p2.x, p2.y);
+  ctx.restore();
+
+  // joints
+  ctx.save();
+  circle(p0.x, p0.y, 10, true);
+  circle(p1.x, p1.y, 10, true);
+  circle(p2.x, p2.y, 8, true);
+  ctx.restore();
+
+  // readouts
+  readoutsEl.textContent =
+    `q1=${rad2deg(state.q[0]).toFixed(1)}°  q2=${rad2deg(state.q[1]).toFixed(1)}°  ` +
+    `speed=${state.speedScale.toFixed(2)}  queue=${cmdQueue.length}  busy=${state.busy}`;
+}
+
+function line(x1,y1,x2,y2){
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+}
+function circle(x,y,r,fill){
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  fill ? ctx.fill() : ctx.stroke();
+}
+
+// -------------------- Worker (Python) --------------------
+const worker = new Worker("./py_worker.js", { type: "classic" });
+
+worker.onmessage = (ev) => {
+  const msg = ev.data;
+  if (!msg || !msg.type) return;
+
+  if (msg.type === "print") log(msg.text);
+  if (msg.type === "error") log(msg.text);
+
+  if (msg.type === "enqueue_cmd") {
+    enqueue(msg.cmd);
+  }
+
+  if (msg.type === "set_speed") {
+    state.speedScale = clamp(msg.value, 0, 1);
+  }
+
+  if (msg.type === "reset_path") {
+    state.toolPath = [];
+  }
+};
+
+function hardResetSim() {
+  cmdQueue.length = 0;
+  state.busy = false;
+  state.currentCmd = null;
+  state.q = [0, 0];
+  state.speedScale = 0.7;
+  state.toolPath = [];
+  worker.postMessage({ type: "sim_reset_done" });
+  draw();
+}
+
+runBtn.onclick = () => {
+  clearLog();
+  state.toolPath = [];
+  worker.postMessage({ type: "run", code: codeEl.value });
+};
+
+stopBtn.onclick = () => {
+  cmdQueue.length = 0;
+  state.busy = false;
+  state.currentCmd = null;
+  worker.postMessage({ type: "stop" });
+  log("[stopped]");
+};
+
+resetBtn.onclick = () => {
+  clearLog();
+  hardResetSim();
+  log("[reset]");
+};
+
+homeBtn.onclick = () => {
+  state.toolPath = [];
+  enqueue({ id: nextCmdId++, type: "HOME" });
+};
+
+// animation loop
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+
+# =============================================================================
+# FILE: py_worker.js
+# =============================================================================
+// py_worker.js (classic worker)
+// Loads Skulpt from CDN and runs user Python in a sandboxed, interruptible environment.
+
+importScripts("https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js");
+importScripts("https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js");
+
+let runToken = 0;
+let pending = new Map(); // cmdId -> {resolve,reject}
+let stopped = false;
+
+function postPrint(s) {
+  self.postMessage({ type: "print", text: String(s) });
+}
+function postError(s) {
+  self.postMessage({ type: "error", text: String(s) });
+}
+
+function makeAwaitableCommand(cmd) {
+  const id = cmd.id;
+  self.postMessage({ type: "enqueue_cmd", cmd });
+  return new Promise((resolve, reject) => {
+    pending.set(String(id), { resolve, reject });
+  });
+}
+
+// Builtin modules: arm, sim
+function armModule() {
+  const mod = {};
+
+  mod.set_speed = new Sk.builtin.func(function (v) {
+    const val = Sk.ffi.remapToJs(v);
+    self.postMessage({ type: "set_speed", value: Number(val) });
+    return Sk.builtin.none.none$;
+  });
+
+  mod.home = new Sk.builtin.func(function () {
+    const id = nextId();
+    return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "HOME" }));
+  });
+
+  mod.set_joint_angles = new Sk.builtin.func(function (lst) {
+    const arr = Sk.ffi.remapToJs(lst);
+    if (!Array.isArray(arr) || arr.length < 2) throw new Sk.builtin.ValueError("Expected [deg1, deg2]");
+    const id = nextId();
+    return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "SET_JOINTS", deg: [Number(arr[0]), Number(arr[1])] }));
+  });
+
+  mod.move_to = new Sk.builtin.func(function (x, y) {
+    const X = Number(Sk.ffi.remapToJs(x));
+    const Y = Number(Sk.ffi.remapToJs(y));
+    const id = nextId();
+    return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "MOVE_TO", x: X, y: Y }));
+  });
+
+  mod.line_to = new Sk.builtin.func(function (x, y, steps) {
+    const X = Number(Sk.ffi.remapToJs(x));
+    const Y = Number(Sk.ffi.remapToJs(y));
+    const st = (steps === undefined) ? 50 : Number(Sk.ffi.remapToJs(steps));
+    const id = nextId();
+    return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "LINE_TO", x: X, y: Y, steps: st }));
+  });
+
+  return mod;
+}
+
+function simModule() {
+  const mod = {};
+
+  mod.sleep = new Sk.builtin.func(function (sec) {
+    const seconds = Math.max(0, Number(Sk.ffi.remapToJs(sec)));
+    const id = nextId();
+    return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "SLEEP", seconds }));
+  });
+
+  mod.reset_path = new Sk.builtin.func(function () {
+    self.postMessage({ type: "reset_path" });
+    return Sk.builtin.none.none$;
+  });
+
+  return mod;
+}
+
+function builtinRead(x) {
+  if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined) {
+    throw new Error("File not found: '" + x + "'");
+  }
+  return Sk.builtinFiles["files"][x];
+}
+
+let _nextId = 1;
+function nextId() { return _nextId++; }
+
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+  if (!msg || !msg.type) return;
+
+  if (msg.type === "stop") {
+    stopped = true;
+    runToken++;
+    for (const [id, pr] of pending.entries()) {
+      pr.reject(new Error("stopped"));
+    }
+    pending.clear();
+    return;
+  }
+
+  if (msg.type === "cmd_done") {
+    const id = String(msg.id);
+    const pr = pending.get(id);
+    if (pr) {
+      pending.delete(id);
+      if (msg.result && msg.result.ok === false) pr.reject(new Error(msg.result.error || "command failed"));
+      else pr.resolve(msg.result);
+    }
+    return;
+  }
+
+  if (msg.type === "sim_reset_done") {
+    _nextId = 1;
+    return;
+  }
+
+  if (msg.type === "run") {
+    stopped = false;
+    const myToken = ++runToken;
+    pending.clear();
+    _nextId = 1;
+
+    const code = String(msg.code || "");
+    self.postMessage({ type: "reset_path" });
+
+    Sk.configure({
+      output: (text) => postPrint(text),
+      read: builtinRead,
+      __future__: Sk.python3,
+      execLimit: 2_500_000,
+    });
+
+    // Patch importModule to provide 'arm' and 'sim'
+    Sk.importModule = (function (orig) {
+      return function (name) {
+        if (name === "arm") {
+          const m = new Sk.builtin.module();
+          const api = armModule();
+          for (const k in api) m.$d[k] = api[k];
+          return m;
+        }
+        if (name === "sim") {
+          const m = new Sk.builtin.module();
+          const api = simModule();
+          for (const k in api) m.$d[k] = api[k];
+          return m;
+        }
+        return orig(name);
+      };
+    })(Sk.importModule);
+
+    try {
+      const p = Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true));
+      await p;
+      if (myToken === runToken && !stopped) postPrint("[done]");
+    } catch (err) {
+      if (myToken !== runToken) return;
+      postError(String(err));
+    }
+  }
+};
