@@ -138,16 +138,16 @@ self.onmessage = async (ev) => {
 
     // Provide built-in modules 'arm' and 'sim' (per-import factory functions)
     Sk.builtinModules = Sk.builtinModules || {};
-    const makeModule = (name, api) => {
-      const m = new Sk.builtin.module();
-      Sk.abstr.setattr(m, new Sk.builtin.str("__name__"), new Sk.builtin.str(name), true);
-      for (const k in api) {
-        Sk.abstr.setattr(m, new Sk.builtin.str(k), api[k], true);
-      }
-      return m;
+    Sk.builtinModules.arm = function() {
+      var mod = armModule();
+      mod.__name__ = new Sk.builtin.str("arm");
+      return mod;
     };
-    Sk.builtinModules.arm = () => makeModule("arm", armModule());
-    Sk.builtinModules.sim = () => makeModule("sim", simModule());
+    Sk.builtinModules.sim = function() {
+      var mod = simModule();
+      mod.__name__ = new Sk.builtin.str("sim");
+      return mod;
+    };
 
     try {
       const p = Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true));
