@@ -18,14 +18,14 @@ const codeEl = $("code");
 codeEl.value = `import arm, sim
 
 arm.home()
-arm.set_speed(0.7)
+arm.set_speed(0.5)
 
 # Draw a square
-arm.move_to(140, 40)
-arm.line_to(140, 120, 40)
-arm.line_to(60, 120, 40)
-arm.line_to(60, 40, 40)
-arm.line_to(140, 40, 40)
+arm.move_to(100, 80)
+arm.line_to(180, 80, 60)
+arm.line_to(180, 160, 60)
+arm.line_to(100, 160, 60)
+arm.line_to(100, 80, 60)
 
 sim.sleep(0.5)
 arm.home()
