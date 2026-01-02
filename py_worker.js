@@ -140,8 +140,10 @@ self.onmessage = async (ev) => {
     Sk.builtinModules = Sk.builtinModules || {};
     const makeModule = (name, api) => {
       const m = new Sk.builtin.module();
-      m.$d.__name__ = new Sk.builtin.str(name);
-      for (const k in api) m.$d[k] = api[k];
+      Sk.abstr.setattr(m, new Sk.builtin.str("__name__"), new Sk.builtin.str(name), true);
+      for (const k in api) {
+        Sk.abstr.setattr(m, new Sk.builtin.str(k), api[k], true);
+      }
       return m;
     };
     Sk.builtinModules.arm = () => makeModule("arm", armModule());
