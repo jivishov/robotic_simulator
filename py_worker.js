@@ -136,18 +136,22 @@ self.onmessage = async (ev) => {
       execLimit: 2_500_000,
     });
 
-    // Provide built-in modules 'arm' and 'sim' (per-import factory functions)
-    Sk.builtinModules = Sk.builtinModules || {};
-    Sk.builtinModules.arm = function() {
-      var mod = armModule();
-      mod.__name__ = new Sk.builtin.str("arm");
+    // Pre-populate Sk.sysmodules with 'arm' and 'sim' modules
+    // This directly injects modules into Python's module cache
+    function createModule(name, apiObj) {
+      var mod = new Sk.builtin.module();
+      mod.$d = {};
+      mod.$d.__name__ = new Sk.builtin.str(name);
+      for (var k in apiObj) {
+        if (apiObj.hasOwnProperty(k)) {
+          mod.$d[k] = apiObj[k];
+        }
+      }
       return mod;
-    };
-    Sk.builtinModules.sim = function() {
-      var mod = simModule();
-      mod.__name__ = new Sk.builtin.str("sim");
-      return mod;
-    };
+    }
+    Sk.sysmodules = Sk.sysmodules || new Sk.builtin.dict([]);
+    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str("arm"), createModule("arm", armModule()));
+    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str("sim"), createModule("sim", simModule()));
 
     try {
       const p = Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true));
