@@ -207,21 +207,26 @@ function smoothstep(t) { return t*t*(3 - 2*t); }
 
 // -------------------- Rendering (2D) --------------------
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Light background
+  ctx.fillStyle = "#f0f4f8";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // coordinate transform: base at bottom-left-ish, y up
   const base = { x: 140, y: canvas.height - 100 };
 
   // grid
   ctx.save();
-  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = "#c0c8d0";
+  ctx.globalAlpha = 0.5;
   for (let x = 0; x < canvas.width; x += 40) { line(x, 0, x, canvas.height); }
   for (let y = 0; y < canvas.height; y += 40) { line(0, y, canvas.width, y); }
   ctx.restore();
 
   // axes
   ctx.save();
-  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = "#607080";
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.8;
   line(base.x, base.y, base.x + 250, base.y);
   line(base.x, base.y, base.x, base.y - 250);
   ctx.restore();
@@ -234,7 +239,9 @@ function draw() {
 
   // toolpath
   ctx.save();
-  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = "#e74c3c";
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.9;
   ctx.beginPath();
   for (let i = 0; i < state.toolPath.length; i++) {
     const tp = state.toolPath[i];
@@ -247,16 +254,20 @@ function draw() {
 
   // links
   ctx.save();
-  ctx.lineWidth = 8;
+  ctx.strokeStyle = "#3498db";
+  ctx.lineWidth = 10;
+  ctx.lineCap = "round";
   line(p0.x, p0.y, p1.x, p1.y);
   line(p1.x, p1.y, p2.x, p2.y);
   ctx.restore();
 
   // joints
   ctx.save();
-  circle(p0.x, p0.y, 10, true);
+  ctx.fillStyle = "#2c3e50";
+  circle(p0.x, p0.y, 12, true);
   circle(p1.x, p1.y, 10, true);
-  circle(p2.x, p2.y, 8, true);
+  ctx.fillStyle = "#e74c3c";
+  circle(p2.x, p2.y, 6, true);
   ctx.restore();
 
   // readouts
