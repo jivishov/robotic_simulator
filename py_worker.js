@@ -81,10 +81,10 @@ function simModule() {
 }
 
 function builtinRead(x) {
-  if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined) {
-    throw new Error("File not found: '" + x + "'");
+  if (Sk.builtinFiles && Sk.builtinFiles["files"] && Sk.builtinFiles["files"][x] !== undefined) {
+    return Sk.builtinFiles["files"][x];
   }
-  return Sk.builtinFiles["files"][x];
+  throw new Error("File not found: '" + x + "'");
 }
 
 let _nextId = 1;
@@ -129,29 +129,25 @@ self.onmessage = async (ev) => {
     const code = String(msg.code || "");
     self.postMessage({ type: "reset_path" });
 
+    // Expose functions on self so they're accessible from eval'd module code
+    self._armModule = armModule;
+    self._simModule = simModule;
+
+    // Add our custom modules to Sk.builtinFiles BEFORE configure
+    // Skulpt looks for modules at src/lib/MODULE.js
+    Sk.builtinFiles = Sk.builtinFiles || {};
+    Sk.builtinFiles["files"] = Sk.builtinFiles["files"] || {};
+    Sk.builtinFiles["files"]["src/lib/arm.js"] =
+      "var $builtinmodule = function(name) { return self._armModule(); };";
+    Sk.builtinFiles["files"]["src/lib/sim.js"] =
+      "var $builtinmodule = function(name) { return self._simModule(); };";
+
     Sk.configure({
       output: (text) => postPrint(text),
       read: builtinRead,
       __future__: Sk.python3,
       execLimit: 2_500_000,
     });
-
-    // Pre-populate Sk.sysmodules with 'arm' and 'sim' modules
-    // This directly injects modules into Python's module cache
-    function createModule(name, apiObj) {
-      var mod = new Sk.builtin.module();
-      mod.$d = {};
-      mod.$d.__name__ = new Sk.builtin.str(name);
-      for (var k in apiObj) {
-        if (apiObj.hasOwnProperty(k)) {
-          mod.$d[k] = apiObj[k];
-        }
-      }
-      return mod;
-    }
-    Sk.sysmodules = Sk.sysmodules || new Sk.builtin.dict([]);
-    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str("arm"), createModule("arm", armModule()));
-    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str("sim"), createModule("sim", simModule()));
 
     try {
       const p = Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true));
