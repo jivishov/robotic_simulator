@@ -22,10 +22,10 @@ arm.set_speed(0.7)
 
 # Draw a square
 arm.move_to(140, 40)
-arm.line_to(140, 120, steps=40)
-arm.line_to(60, 120, steps=40)
-arm.line_to(60, 40, steps=40)
-arm.line_to(140, 40, steps=40)
+arm.line_to(140, 120, 40)
+arm.line_to(60, 120, 40)
+arm.line_to(60, 40, 40)
+arm.line_to(140, 40, 40)
 
 sim.sleep(0.5)
 arm.home()
