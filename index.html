@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Python Robot Arm Simulator (2D Kinematics)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title">Python Robot Arm Simulator</div>
+      <div class="btns">
+        <button id="runBtn">Run</button>
+        <button id="stopBtn">Stop</button>
+        <button id="resetBtn">Reset</button>
+        <button id="homeBtn">Home</button>
+        <button id="toggle3dBtn" class="ghost">3D View (off)</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="panel">
+        <div class="panelTitle">Python Code</div>
+        <textarea id="code"></textarea>
+        <div class="hint">
+          API: <code>import arm, sim</code> |
+          <code>arm.move_to(x,y)</code> |
+          <code>arm.line_to(x,y,steps=50)</code> |
+          <code>arm.set_joint_angles([deg,deg])</code> |
+          <code>arm.set_speed(0..1)</code> |
+          <code>sim.sleep(sec)</code>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelTitle">Simulator</div>
+        <canvas id="canvas" width="700" height="520"></canvas>
+        <div class="readouts" id="readouts"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panelTitle">3D Preview (planar view in 3D)</div>
+        <div id="threeContainer" class="threeContainer">
+          <div class="threePlaceholder">Enable 3D to preview the planar arm in 3D.</div>
+        </div>
+      </section>
+
+      <section class="panel console">
+        <div class="panelTitle">Console</div>
+        <pre id="console"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
