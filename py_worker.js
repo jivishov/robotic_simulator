@@ -52,23 +52,33 @@ function armModule() {
     return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "MOVE_TO", x: X, y: Y }));
   });
 
-  mod.line_to = new Sk.builtin.func(function (kwa, x, y, steps) {
-    // Handle keyword arguments - kwa is an array of [key, value, key, value, ...]
-    Sk.abstr.checkArgsLen("line_to", arguments, 3, 4);
-    var kwdict = {};
-    if (kwa) {
+  // line_to with keyword argument support for 'steps'
+  var lineto_f = function (kwa) {
+    // With co_kwargs, first arg is kwargs array, rest are positional in 'arguments'
+    var args = Array.prototype.slice.call(arguments, 1);
+    var x = args[0];
+    var y = args[1];
+    var steps = args[2];
+
+    // Parse keyword arguments
+    var kwsteps;
+    if (kwa && Array.isArray(kwa)) {
       for (var i = 0; i < kwa.length; i += 2) {
-        kwdict[kwa[i]] = kwa[i + 1];
+        if (kwa[i] === "steps") {
+          kwsteps = kwa[i + 1];
+        }
       }
     }
+
     const X = Number(Sk.ffi.remapToJs(x));
     const Y = Number(Sk.ffi.remapToJs(y));
-    // steps can come from positional arg or keyword arg
-    var stepsVal = steps !== undefined ? steps : kwdict["steps"];
+    // steps from positional arg takes precedence, then keyword arg, then default
+    var stepsVal = steps !== undefined ? steps : kwsteps;
     const st = (stepsVal === undefined) ? 50 : Number(Sk.ffi.remapToJs(stepsVal));
     const id = nextId();
     return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "LINE_TO", x: X, y: Y, steps: st }));
-  });
+  };
+  mod.line_to = new Sk.builtin.func(lineto_f);
   mod.line_to.co_kwargs = true;
 
   return mod;
