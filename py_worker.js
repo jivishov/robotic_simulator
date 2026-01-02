@@ -52,13 +52,24 @@ function armModule() {
     return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "MOVE_TO", x: X, y: Y }));
   });
 
-  mod.line_to = new Sk.builtin.func(function (x, y, steps) {
+  mod.line_to = new Sk.builtin.func(function (kwa, x, y, steps) {
+    // Handle keyword arguments - kwa is an array of [key, value, key, value, ...]
+    Sk.abstr.checkArgsLen("line_to", arguments, 3, 4);
+    var kwdict = {};
+    if (kwa) {
+      for (var i = 0; i < kwa.length; i += 2) {
+        kwdict[kwa[i]] = kwa[i + 1];
+      }
+    }
     const X = Number(Sk.ffi.remapToJs(x));
     const Y = Number(Sk.ffi.remapToJs(y));
-    const st = (steps === undefined) ? 50 : Number(Sk.ffi.remapToJs(steps));
+    // steps can come from positional arg or keyword arg
+    var stepsVal = steps !== undefined ? steps : kwdict["steps"];
+    const st = (stepsVal === undefined) ? 50 : Number(Sk.ffi.remapToJs(stepsVal));
     const id = nextId();
     return Sk.misceval.promiseToSuspension(makeAwaitableCommand({ id, type: "LINE_TO", x: X, y: Y, steps: st }));
   });
+  mod.line_to.co_kwargs = true;
 
   return mod;
 }
